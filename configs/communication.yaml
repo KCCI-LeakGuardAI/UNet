@@ -1,0 +1,11 @@
+uart:
+  port: /dev/ttyUSB0
+  baudrate: 115200
+  send_hz: 10
+
+tcp:
+  host: 0.0.0.0
+  port: 5000
+  encoding: utf-8
+  delimiter: "\n"
+

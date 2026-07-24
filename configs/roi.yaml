@@ -1,0 +1,14 @@
+monitoring_roi:
+  # Coordinates are in the 640x480 capture coordinate system.
+  x: 80
+  y: 60
+  width: 480
+  height: 360
+
+danger_roi:
+  x: 430
+  y: 260
+  width: 100
+  height: 100
+  minimum_overlap_pixels: 20
+

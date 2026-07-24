@@ -1,0 +1,9 @@
+thresholds:
+  mask_probability: 0.5
+  min_component_pixels: 100
+  leak_detect_ratio: 0.3
+  warning_ratio: 1.5
+  danger_ratio: 3.5
+  spreading_delta_ratio: 0.25
+  spreading_confirm_frames: 5
+

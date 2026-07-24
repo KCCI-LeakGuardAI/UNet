@@ -1,0 +1,26 @@
+camera:
+  index: 0
+  width: 640
+  height: 480
+  fps: 30
+  image_extension: .jpg
+  jpeg_quality: 95
+
+paths:
+  raw: dataset/raw
+  metadata: dataset/metadata/dataset_metadata.csv
+
+hsv:
+  lower: [90, 80, 50]
+  upper: [135, 255, 255]
+
+morphology:
+  kernel_size: 5
+  open_iterations: 1
+  close_iterations: 2
+  min_component_pixels: 100
+
+capture:
+  default_lighting_condition: normal
+  default_liquid_concentration: standard
+

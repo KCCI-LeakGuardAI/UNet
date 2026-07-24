@@ -1,0 +1,5 @@
+numpy>=1.23,<3
+opencv-python>=4.8,<5
+PyYAML>=6.0,<7
+pytest>=7.4,<9
+
