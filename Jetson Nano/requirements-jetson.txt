@@ -1,0 +1,5 @@
+# TensorFlow 2.4.1 must be installed from the JetPack-compatible NVIDIA wheel.
+# Do not install the generic PyPI TensorFlow wheel on Jetson Nano.
+numpy==1.19.5
+PyYAML==5.3.1
+h5py==2.10.0

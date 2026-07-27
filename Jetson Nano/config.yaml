@@ -1,0 +1,63 @@
+camera:
+  index: 0
+  width: 640
+  height: 480
+  fps: 30
+  backend: auto
+  fourcc: MJPG
+  read_fail_limit: 30
+
+model:
+  path: models/best_model.h5
+  threshold: 0.5
+  # false: predict the same full camera composition used during data capture,
+  # then calculate area only inside Monitoring ROI.
+  # true: crop Monitoring ROI before inference. Retraining with the same crop
+  # is recommended before enabling this.
+  crop_to_monitoring_roi: false
+  min_component_pixels: 100
+  morphology_kernel: 3
+  open_iterations: 1
+  close_iterations: 1
+
+analysis:
+  # All ratios are percentages of Monitoring ROI, not 0-1 fractions.
+  leak_detect_ratio: 0.3
+  warning_ratio: 1.5
+  danger_ratio: 3.5
+  ema_alpha: 0.25
+  detection_window_frames: 3
+  detection_required_frames: 2
+  spreading_window_frames: 5
+  spreading_delta_ratio: 0.25
+  spreading_confirm_frames: 5
+  spreading_escalates: true
+
+roi:
+  # Coordinates below are based on a 640x480 reference frame and are
+  # automatically scaled if the camera returns another resolution.
+  reference_width: 640
+  reference_height: 480
+  monitoring:
+    x: 80
+    y: 60
+    width: 480
+    height: 360
+  danger:
+    x: 430
+    y: 260
+    width: 100
+    height: 100
+    minimum_overlap_pixels: 20
+
+display:
+  window_name: LeakGuard AI - Jetson Nano
+  overlay_alpha: 0.45
+  show_mask_preview: true
+  console_interval_seconds: 2.0
+  snapshot_directory: snapshots
+
+logging:
+  enabled: true
+  csv_path: logs/realtime_status.csv
+  interval_seconds: 1.0

@@ -6,6 +6,16 @@ model:
   output_channels: 1
   dropout: 0.1
 
+data:
+  train_images: dataset/prepared/images/train
+  train_masks: dataset/prepared/masks/train
+  val_images: dataset/prepared/images/val
+  val_masks: dataset/prepared/masks/val
+  test_images: dataset/prepared/images/test
+  test_masks: dataset/prepared/masks/test
+  shuffle_buffer: 630
+  seed: 42
+
 training:
   epochs: 50
   batch_size: 4
@@ -15,3 +25,12 @@ training:
   reduce_lr_patience: 4
   checkpoint_metric: val_dice_score
 
+output:
+  root: artifacts/training
+  best_model: models/best_model.h5
+  final_model: models/final_model.h5
+  saved_model: models/saved_model
+  training_log: logs/training_log.csv
+  summary: logs/training_summary.json
+  plots: plots
+  predictions: predictions
