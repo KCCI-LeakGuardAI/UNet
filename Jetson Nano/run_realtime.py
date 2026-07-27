@@ -17,6 +17,7 @@ from leakguard.camera import FrameSource
 from leakguard.config import load_config
 from leakguard.event_logger import StatusCsvLogger
 from leakguard.predictor import UNetPredictor
+from leakguard.tcp_client import LatestStatusTcpClient, with_network_overrides
 from leakguard.visualization import Telemetry, render_dashboard
 
 LOG = logging.getLogger("leakguard")
@@ -44,6 +45,15 @@ def parse_args() -> argparse.Namespace:
         "--max-frames", type=int, default=0, help="Stop after N frames; 0=unlimited"
     )
     parser.add_argument("--no-log", action="store_true", help="Disable CSV logging")
+    parser.add_argument(
+        "--server-host", help="Override Raspberry Pi TCP server address"
+    )
+    parser.add_argument(
+        "--server-port", type=int, help="Override Raspberry Pi TCP server port"
+    )
+    parser.add_argument(
+        "--no-network", action="store_true", help="Disable TCP status transmission"
+    )
     parser.add_argument("--verbose", action="store_true")
     return parser.parse_args()
 
@@ -74,6 +84,15 @@ def main() -> int:
                 config.model, path=Path(args.model).expanduser().resolve()
             ),
         )
+    config = replace(
+        config,
+        network=with_network_overrides(
+            config.network,
+            host=args.server_host,
+            port=args.server_port,
+            disabled=args.no_network,
+        ),
+    )
 
     predictor = UNetPredictor(config.model)
     analyzer = LeakAnalyzer(
@@ -90,6 +109,9 @@ def main() -> int:
         csv_logger = StatusCsvLogger(
             config.logging.csv_path, config.logging.interval_seconds
         )
+    tcp_client: Optional[LatestStatusTcpClient] = None
+    if config.network.enabled:
+        tcp_client = LatestStatusTcpClient(config.network)
 
     frame_index = 0
     failed_reads = 0
@@ -99,6 +121,8 @@ def main() -> int:
     last_rendered = None
     try:
         source.open()
+        if tcp_client:
+            tcp_client.start()
         LOG.info("Inference started from %s", source.description)
         while not STOP_REQUESTED:
             loop_started = time.perf_counter()
@@ -129,6 +153,8 @@ def main() -> int:
                     status = analyzer.analyze(
                         prediction.mask, monitoring_roi, danger_roi
                     )
+            if tcp_client:
+                tcp_client.update(status)
             now = time.perf_counter()
             instantaneous_fps = 1.0 / max(now - previous_time, 1e-6)
             fps = instantaneous_fps if fps == 0.0 else 0.15 * instantaneous_fps + 0.85 * fps
@@ -191,6 +217,8 @@ def main() -> int:
         source.release()
         if csv_logger:
             csv_logger.close()
+        if tcp_client:
+            tcp_client.stop()
         cv2.destroyAllWindows()
         LOG.info("Resources released; processed frames=%d", frame_index)
 

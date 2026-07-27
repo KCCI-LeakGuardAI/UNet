@@ -61,3 +61,14 @@ logging:
   enabled: true
   csv_path: logs/realtime_status.csv
   interval_seconds: 1.0
+
+network:
+  enabled: true
+  # Change this to the Raspberry Pi's actual LAN IP address.
+  host: 192.168.0.100
+  port: 5000
+  send_hz: 10
+  connect_timeout_seconds: 2.0
+  reconnect_interval_seconds: 2.0
+  # Stop sending old data if inference has not produced a new result recently.
+  status_stale_seconds: 0.5

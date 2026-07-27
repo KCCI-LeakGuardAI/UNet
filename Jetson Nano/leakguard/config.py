@@ -120,6 +120,17 @@ class LoggingConfig:
 
 
 @dataclass(frozen=True)
+class NetworkConfig:
+    enabled: bool
+    host: str
+    port: int
+    send_hz: float
+    connect_timeout_seconds: float
+    reconnect_interval_seconds: float
+    status_stale_seconds: float
+
+
+@dataclass(frozen=True)
 class AppConfig:
     camera: CameraConfig
     model: ModelConfig
@@ -127,6 +138,7 @@ class AppConfig:
     roi: RoiConfig
     display: DisplayConfig
     logging: LoggingConfig
+    network: NetworkConfig
 
 
 def _rect(value: Dict[str, Any], name: str) -> Rect:
@@ -163,6 +175,7 @@ def load_config(path: str | Path) -> AppConfig:
         log = raw["logging"]
     except KeyError as exc:
         raise ValueError(f"Missing top-level config section: {exc.args[0]}") from exc
+    network = raw.get("network", {})
 
     app_config = AppConfig(
         camera=CameraConfig(
@@ -224,6 +237,21 @@ def load_config(path: str | Path) -> AppConfig:
             csv_path=_resolve(base, str(log.get("csv_path", "logs/status.csv"))),
             interval_seconds=float(log.get("interval_seconds", 1.0)),
         ),
+        network=NetworkConfig(
+            enabled=bool(network.get("enabled", False)),
+            host=str(network.get("host", "127.0.0.1")),
+            port=int(network.get("port", 5000)),
+            send_hz=float(network.get("send_hz", 10.0)),
+            connect_timeout_seconds=float(
+                network.get("connect_timeout_seconds", 2.0)
+            ),
+            reconnect_interval_seconds=float(
+                network.get("reconnect_interval_seconds", 2.0)
+            ),
+            status_stale_seconds=float(
+                network.get("status_stale_seconds", 0.5)
+            ),
+        ),
     )
     _validate(app_config)
     return app_config
@@ -253,3 +281,15 @@ def _validate(config: AppConfig) -> None:
         <= config.analysis.detection_window_frames
     ):
         raise ValueError("Invalid consecutive-frame detection settings")
+    if not config.network.host:
+        raise ValueError("network.host must not be empty")
+    if not 1 <= config.network.port <= 65535:
+        raise ValueError("network.port must be in 1..65535")
+    if config.network.send_hz <= 0.0:
+        raise ValueError("network.send_hz must be positive")
+    if config.network.connect_timeout_seconds <= 0.0:
+        raise ValueError("network.connect_timeout_seconds must be positive")
+    if config.network.reconnect_interval_seconds <= 0.0:
+        raise ValueError("network.reconnect_interval_seconds must be positive")
+    if config.network.status_stale_seconds <= 0.0:
+        raise ValueError("network.status_stale_seconds must be positive")

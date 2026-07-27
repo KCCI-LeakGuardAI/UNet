@@ -181,4 +181,52 @@ python3 run_realtime.py --image sample.jpg --headless
 - 카메라 위치·각도·폼보드가 바뀌면 ROI 좌표를 다시 맞춰야 합니다.
 - 화면 표시가 필요하면 Jetson 데스크톱에서 실행하거나 올바른 `DISPLAY` 환경이
   연결돼 있어야 합니다.
-- UART와 TCP 통신은 이번 실시간 추론 코드의 범위에 포함하지 않았습니다.
+- Jetson은 Raspberry Pi TCP 서버로 추론 상태를 전송합니다. STM32 직렬 통신은
+  Raspberry Pi 서버가 담당합니다.
+
+## 8. Raspberry Pi TCP 전송
+
+`config.yaml`의 `network.host`를 Raspberry Pi의 실제 IP 주소로 수정합니다.
+Raspberry Pi 서버의 기본 포트는 `5000`이며 추론 상태는 10 Hz로 전송됩니다.
+
+```yaml
+network:
+  enabled: true
+  host: 192.168.0.100
+  port: 5000
+  send_hz: 10
+```
+
+패킷은 공백으로 구분한 정수 네 개와 마지막 개행 문자로 구성됩니다.
+
+```text
+<state> <area> <spread> <zone>\n
+```
+
+- `state`: `NORMAL=0`, `SMALL_LEAK=1`, `WARNING=2`, `DANGER=3`
+- `area`: Monitoring ROI 기준 누수 면적 퍼센트 × 100 (`5.00% → 500`)
+- `spread`: 확산 중이면 `1`, 아니면 `0`
+- `zone`: Danger ROI를 침범하면 `1`, 아니면 `0`
+
+예를 들어 `WARNING`, 면적 `2.36%`, 확산 중, Danger ROI 미침범 상태는 다음과
+같습니다.
+
+```text
+2 236 1 0
+```
+
+실행할 때 서버 주소를 임시로 덮어쓸 수도 있습니다.
+
+```bash
+python3 run_realtime.py --server-host 192.168.0.20 --server-port 5000
+```
+
+네트워크 없이 카메라와 추론만 시험하려면 다음과 같이 실행합니다.
+
+```bash
+python3 run_realtime.py --no-network
+```
+
+Raspberry Pi가 꺼져 있거나 연결이 끊겨도 추론은 계속되며 클라이언트는 자동으로
+재접속합니다. 오래된 추론 결과가 안전 제어에 사용되지 않도록 새 결과가 일정 시간
+들어오지 않으면 전송을 잠시 중단합니다.
