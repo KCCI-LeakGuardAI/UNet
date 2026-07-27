@@ -1,0 +1,25 @@
+split:
+  train: 0.70
+  val: 0.15
+  test: 0.15
+  seed: 42
+  pseudo_session_size: 5
+
+augmentation:
+  copies_per_image: 2
+  seed: 42
+  rotation_degrees: 5.0
+  translation_fraction: 0.03
+  scale_min: 0.95
+  scale_max: 1.05
+  brightness_factor_min: 0.88
+  brightness_factor_max: 1.12
+  contrast_factor_min: 0.92
+  contrast_factor_max: 1.08
+  saturation_factor_min: 0.92
+  saturation_factor_max: 1.08
+  hue_shift_max: 2
+  blur_probability: 0.20
+  noise_probability: 0.25
+  noise_std_max: 3.0
+  minimum_foreground_retention: 0.90

@@ -11,16 +11,18 @@ paths:
   metadata: dataset/metadata/dataset_metadata.csv
 
 hsv:
-  lower: [90, 80, 50]
-  upper: [135, 255, 255]
+  # Brown test liquid on the white background. OpenCV HSV ranges:
+  # H=0..179, S=0..255, V=0..255.
+  lower: [10, 45, 80]
+  upper: [35, 255, 230]
 
 morphology:
-  kernel_size: 5
+  kernel_size: 3
   open_iterations: 1
-  close_iterations: 2
-  min_component_pixels: 100
+  close_iterations: 1
+  min_component_pixels: 20
+  fill_holes: true
 
 capture:
   default_lighting_condition: normal
   default_liquid_concentration: standard
-

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from src.data.mask_processing import generate_hsv_mask
+from src.data.augmentation import augment_pair
+from src.data.mask_processing import fill_mask_holes, generate_hsv_mask
 from src.data.roi import Roi
 
 
@@ -21,3 +22,42 @@ def test_roi_validation() -> None:
     roi.validate(100, 100)
     assert roi.pixels == 1200
 
+
+def test_fill_mask_holes_preserves_outer_background() -> None:
+    mask = np.zeros((20, 20), dtype=np.uint8)
+    mask[5:15, 5:15] = 255
+    mask[8:12, 8:12] = 0
+    filled = fill_mask_holes(mask)
+    assert filled[9, 9] == 255
+    assert filled[0, 0] == 0
+
+
+def test_augmentation_preserves_binary_mask_and_shape() -> None:
+    image = np.full((64, 64, 3), 220, dtype=np.uint8)
+    mask = np.zeros((64, 64), dtype=np.uint8)
+    image[20:40, 20:40] = (30, 80, 140)
+    mask[20:40, 20:40] = 255
+    config = {
+        "rotation_degrees": 5,
+        "translation_fraction": 0.03,
+        "scale_min": 0.95,
+        "scale_max": 1.05,
+        "brightness_factor_min": 0.9,
+        "brightness_factor_max": 1.1,
+        "contrast_factor_min": 0.95,
+        "contrast_factor_max": 1.05,
+        "saturation_factor_min": 0.95,
+        "saturation_factor_max": 1.05,
+        "hue_shift_max": 2,
+        "blur_probability": 0.0,
+        "noise_probability": 0.0,
+        "noise_std_max": 3.0,
+        "minimum_foreground_retention": 0.9,
+    }
+    augmented_image, augmented_mask = augment_pair(
+        image, mask, np.random.default_rng(42), config
+    )
+    assert augmented_image.shape == image.shape
+    assert augmented_mask.shape == mask.shape
+    assert set(np.unique(augmented_mask)).issubset({0, 255})
+    assert np.count_nonzero(augmented_mask) >= np.count_nonzero(mask) * 0.9

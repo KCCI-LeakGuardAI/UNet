@@ -105,6 +105,29 @@ python -m pytest
 python -m compileall -q src scripts
 ```
 
+## 승인 데이터 분리 및 Train 증강
+
+수동 검수에서 `approved`로 기록된 이미지–마스크 쌍만 의사 세션 단위로
+Train/Validation/Test에 약 70/15/15 비율로 분리합니다.
+
+```bash
+python scripts/split_dataset.py --config configs/augmentation.yaml
+```
+
+촬영 Session 메타데이터가 없는 티처블 머신 데이터는 같은 클래스·파일명 계열의
+연속 5장을 하나의 의사 세션으로 취급합니다. 같은 의사 세션은 둘 이상의 split에
+들어가지 않습니다.
+
+Train 원본에만 이미지당 두 개의 동기화 증강 쌍을 생성합니다.
+
+```bash
+python scripts/augment_dataset.py --config configs/augmentation.yaml
+```
+
+마스크에는 이미지와 같은 회전·이동·크기 변환을 Nearest Neighbor로 적용하며,
+밝기·대비·채도·Hue·Blur·Noise는 이미지에만 적용합니다. Validation과 Test에는
+증강을 적용하지 않습니다.
+
 카메라가 OpenCV의 수동 노출 제어를 지원하는지는 다음 명령으로 진단할 수 있습니다.
 
 ```bash

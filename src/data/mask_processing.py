@@ -25,6 +25,16 @@ def remove_small_components(mask: np.ndarray, min_pixels: int) -> np.ndarray:
     return output
 
 
+def fill_mask_holes(mask: np.ndarray) -> np.ndarray:
+    """Fill background regions fully enclosed by foreground liquid pixels."""
+    binary = (mask > 0).astype(np.uint8) * 255
+    padded = cv2.copyMakeBorder(binary, 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
+    flood = padded.copy()
+    cv2.floodFill(flood, None, (0, 0), 255)
+    enclosed = cv2.bitwise_not(flood)[1:-1, 1:-1]
+    return cv2.bitwise_or(binary, enclosed)
+
+
 def generate_hsv_mask(
     image_bgr: np.ndarray,
     lower: list[int],
@@ -33,6 +43,7 @@ def generate_hsv_mask(
     open_iterations: int,
     close_iterations: int,
     min_component_pixels: int,
+    fill_holes: bool = True,
 ) -> np.ndarray:
     validate_hsv_bounds(lower, upper)
     if kernel_size < 1 or kernel_size % 2 == 0:
@@ -44,7 +55,8 @@ def generate_hsv_mask(
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=open_iterations)
     if close_iterations:
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=close_iterations)
-    return remove_small_components(mask, min_component_pixels)
+    mask = remove_small_components(mask, min_component_pixels)
+    return fill_mask_holes(mask) if fill_holes else mask
 
 
 def make_overlay(image_bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
@@ -54,4 +66,3 @@ def make_overlay(image_bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
     selected = mask > 0
     overlay[selected] = cv2.addWeighted(image_bgr, 0.55, colored, 0.45, 0)[selected]
     return overlay
-

@@ -13,5 +13,6 @@ dataset/images_unreviewed/*
 dataset/masks_unreviewed/*
 dataset/overlays/*
 dataset/rejected/*
+dataset/prepared/
+dataset/metadata/*.csv
 !dataset/**/.gitkeep
-

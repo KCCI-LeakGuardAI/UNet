@@ -15,7 +15,11 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp"}
 
 
 def keyed_files(folder: Path) -> dict[str, Path]:
-    return {p.stem: p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES}
+    return {
+        p.relative_to(folder).with_suffix("").as_posix(): p
+        for p in folder.rglob("*")
+        if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES
+    }
 
 
 def main() -> int:
@@ -72,4 +76,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
