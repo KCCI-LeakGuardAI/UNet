@@ -5,7 +5,7 @@ import socket
 import threading
 import time
 from dataclasses import replace
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from .analyzer import LeakStatus
 from .config import NetworkConfig
@@ -55,7 +55,7 @@ class LatestStatusTcpClient:
         self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._run,
-            name="leakguard-tcp",
+            name=f"leakguard-tcp-{self.config.port}",
             daemon=True,
         )
         self._thread.start()
@@ -128,14 +128,14 @@ class LatestStatusTcpClient:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             self._socket = sock
             LOG.info(
-                "Connected to Raspberry Pi at %s:%d",
+                "Connected to TCP server at %s:%d",
                 self.config.host,
                 self.config.port,
             )
             return True
         except OSError as exc:
             LOG.warning(
-                "Could not connect to Raspberry Pi at %s:%d (%s); retrying",
+                "Could not connect to TCP server at %s:%d (%s); retrying",
                 self.config.host,
                 self.config.port,
                 exc,
@@ -168,3 +168,13 @@ def with_network_overrides(
         host=host or config.host,
         port=port if port is not None else config.port,
     )
+
+
+def expand_network_targets(config: NetworkConfig) -> List[NetworkConfig]:
+    """Create one independent client config for every unique destination port."""
+    ports = [config.port]
+    ports.extend(config.additional_ports)
+    return [
+        replace(config, port=port, additional_ports=())
+        for port in dict.fromkeys(ports)
+    ]

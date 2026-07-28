@@ -5,12 +5,26 @@ import threading
 import time
 from pathlib import Path
 
+import cv2
 import numpy as np
 
 from leakguard.analyzer import LeakAnalyzer, LeakStatus
-from leakguard.config import NetworkConfig, Rect, load_config
+from leakguard.config import NetworkConfig, Rect, VideoStreamConfig, load_config
 from leakguard.postprocess import postprocess_probability
-from leakguard.tcp_client import LatestStatusTcpClient, encode_status_packet
+from leakguard.tcp_client import (
+    LatestStatusTcpClient,
+    encode_status_packet,
+    expand_network_targets,
+)
+from leakguard.video_streamer import (
+    LatestFrameTcpStreamer,
+    VIDEO_FLAG_ANNOTATED,
+    VIDEO_HEADER,
+    VIDEO_HEADER_SIZE,
+    VIDEO_MAGIC,
+    VIDEO_VERSION,
+    encode_video_packet,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +35,13 @@ def test_config_and_roi_scaling() -> None:
     monitoring, danger = config.roi.for_frame(320, 240)
     assert monitoring == Rect(40, 30, 240, 180)
     assert danger == Rect(215, 130, 50, 50)
+    assert [target.port for target in expand_network_targets(config.network)] == [
+        5000,
+        5001,
+    ]
+    assert config.video_stream.enabled
+    assert config.video_stream.port == 5003
+    assert config.video_stream.fps == 5.0
 
 
 def test_postprocess_removes_small_components() -> None:
@@ -134,3 +155,104 @@ def test_tcp_client_sends_latest_status_at_10_hz() -> None:
     lines = received.splitlines()
     assert 5 <= len(lines) <= 7
     assert all(line == b"2 236 1 0" for line in lines)
+
+
+def test_video_packet_header_and_jpeg_payload() -> None:
+    config = VideoStreamConfig(
+        enabled=True,
+        host="127.0.0.1",
+        port=5003,
+        fps=5.0,
+        jpeg_quality=65,
+        width=64,
+        height=48,
+        connect_timeout_seconds=1.0,
+        reconnect_interval_seconds=0.1,
+        frame_stale_seconds=1.0,
+        max_frame_bytes=100000,
+    )
+    frame = np.zeros((24, 32, 3), dtype=np.uint8)
+    frame[:, :, 1] = 180
+    packet = encode_video_packet(
+        frame,
+        sequence=123,
+        timestamp_ms=1720000000123,
+        config=config,
+    )
+    fields = VIDEO_HEADER.unpack(packet[:VIDEO_HEADER_SIZE])
+    magic, version, flags, header_size, sequence, timestamp_ms, jpeg_size = fields
+
+    assert magic == VIDEO_MAGIC
+    assert version == VIDEO_VERSION
+    assert flags == VIDEO_FLAG_ANNOTATED
+    assert header_size == VIDEO_HEADER_SIZE == 24
+    assert sequence == 123
+    assert timestamp_ms == 1720000000123
+    assert jpeg_size == len(packet) - VIDEO_HEADER_SIZE
+
+    decoded = np.frombuffer(packet[VIDEO_HEADER_SIZE:], dtype=np.uint8)
+    image = cv2.imdecode(decoded, cv2.IMREAD_COLOR)
+    assert image is not None
+    assert image.shape[:2] == (48, 64)
+
+
+def test_video_streamer_sends_one_complete_frame() -> None:
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    listener.settimeout(2.0)
+    host, port = listener.getsockname()
+    complete = threading.Event()
+    received = {}
+
+    def receive_exact(connection: socket.socket, size: int) -> bytes:
+        data = bytearray()
+        while len(data) < size:
+            chunk = connection.recv(size - len(data))
+            if not chunk:
+                break
+            data.extend(chunk)
+        return bytes(data)
+
+    def receive_frame() -> None:
+        connection, _ = listener.accept()
+        with connection:
+            header = receive_exact(connection, VIDEO_HEADER_SIZE)
+            if len(header) != VIDEO_HEADER_SIZE:
+                return
+            fields = VIDEO_HEADER.unpack(header)
+            payload = receive_exact(connection, fields[-1])
+            received["fields"] = fields
+            received["payload"] = payload
+            complete.set()
+
+    receiver = threading.Thread(target=receive_frame)
+    receiver.start()
+    config = VideoStreamConfig(
+        enabled=True,
+        host=host,
+        port=port,
+        fps=5.0,
+        jpeg_quality=65,
+        width=64,
+        height=48,
+        connect_timeout_seconds=1.0,
+        reconnect_interval_seconds=0.1,
+        frame_stale_seconds=2.0,
+        max_frame_bytes=100000,
+    )
+    streamer = LatestFrameTcpStreamer(config)
+    frame = np.full((48, 64, 3), 127, dtype=np.uint8)
+    try:
+        streamer.update(frame)
+        streamer.start()
+        assert complete.wait(2.0)
+    finally:
+        streamer.stop()
+        receiver.join(timeout=2.0)
+        listener.close()
+
+    fields = received["fields"]
+    assert fields[0] == VIDEO_MAGIC
+    assert fields[1] == VIDEO_VERSION
+    assert len(received["payload"]) == fields[-1]

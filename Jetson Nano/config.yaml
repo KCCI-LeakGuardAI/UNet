@@ -66,9 +66,28 @@ network:
   enabled: true
   # Change this to the Raspberry Pi's actual LAN IP address.
   host: 192.168.0.100
+  # Main C server/DB port.
   port: 5000
+  # Qt HMI receives the same packet through an independent TCP connection.
+  additional_ports:
+    - 5001
   send_hz: 10
   connect_timeout_seconds: 2.0
   reconnect_interval_seconds: 2.0
   # Stop sending old data if inference has not produced a new result recently.
   status_stale_seconds: 0.5
+
+video_stream:
+  enabled: true
+  # Uses network.host unless a separate host is specified. The --server-host
+  # command-line override also applies to this stream.
+  port: 5003
+  fps: 5
+  jpeg_quality: 65
+  width: 640
+  height: 480
+  connect_timeout_seconds: 2.0
+  reconnect_interval_seconds: 2.0
+  # Do not transmit a frozen frame if inference stops producing new frames.
+  frame_stale_seconds: 1.0
+  max_frame_bytes: 1000000

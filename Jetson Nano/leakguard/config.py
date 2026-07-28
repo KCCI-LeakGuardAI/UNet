@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 import yaml
 
@@ -128,6 +128,22 @@ class NetworkConfig:
     connect_timeout_seconds: float
     reconnect_interval_seconds: float
     status_stale_seconds: float
+    additional_ports: Tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class VideoStreamConfig:
+    enabled: bool
+    host: str
+    port: int
+    fps: float
+    jpeg_quality: int
+    width: int
+    height: int
+    connect_timeout_seconds: float
+    reconnect_interval_seconds: float
+    frame_stale_seconds: float
+    max_frame_bytes: int
 
 
 @dataclass(frozen=True)
@@ -139,6 +155,7 @@ class AppConfig:
     display: DisplayConfig
     logging: LoggingConfig
     network: NetworkConfig
+    video_stream: VideoStreamConfig
 
 
 def _rect(value: Dict[str, Any], name: str) -> Rect:
@@ -176,6 +193,7 @@ def load_config(path: str | Path) -> AppConfig:
     except KeyError as exc:
         raise ValueError(f"Missing top-level config section: {exc.args[0]}") from exc
     network = raw.get("network", {})
+    video_stream = raw.get("video_stream", {})
 
     app_config = AppConfig(
         camera=CameraConfig(
@@ -251,6 +269,34 @@ def load_config(path: str | Path) -> AppConfig:
             status_stale_seconds=float(
                 network.get("status_stale_seconds", 0.5)
             ),
+            additional_ports=tuple(
+                int(port) for port in network.get("additional_ports", [])
+            ),
+        ),
+        video_stream=VideoStreamConfig(
+            enabled=bool(video_stream.get("enabled", False)),
+            host=str(
+                video_stream.get(
+                    "host", network.get("host", "127.0.0.1")
+                )
+            ),
+            port=int(video_stream.get("port", 5003)),
+            fps=float(video_stream.get("fps", 5.0)),
+            jpeg_quality=int(video_stream.get("jpeg_quality", 65)),
+            width=int(video_stream.get("width", 640)),
+            height=int(video_stream.get("height", 480)),
+            connect_timeout_seconds=float(
+                video_stream.get("connect_timeout_seconds", 2.0)
+            ),
+            reconnect_interval_seconds=float(
+                video_stream.get("reconnect_interval_seconds", 2.0)
+            ),
+            frame_stale_seconds=float(
+                video_stream.get("frame_stale_seconds", 1.0)
+            ),
+            max_frame_bytes=int(
+                video_stream.get("max_frame_bytes", 1000000)
+            ),
         ),
     )
     _validate(app_config)
@@ -285,6 +331,11 @@ def _validate(config: AppConfig) -> None:
         raise ValueError("network.host must not be empty")
     if not 1 <= config.network.port <= 65535:
         raise ValueError("network.port must be in 1..65535")
+    if any(
+        port < 1 or port > 65535
+        for port in config.network.additional_ports
+    ):
+        raise ValueError("network.additional_ports must contain ports in 1..65535")
     if config.network.send_hz <= 0.0:
         raise ValueError("network.send_hz must be positive")
     if config.network.connect_timeout_seconds <= 0.0:
@@ -293,3 +344,25 @@ def _validate(config: AppConfig) -> None:
         raise ValueError("network.reconnect_interval_seconds must be positive")
     if config.network.status_stale_seconds <= 0.0:
         raise ValueError("network.status_stale_seconds must be positive")
+    if not config.video_stream.host:
+        raise ValueError("video_stream.host must not be empty")
+    if not 1 <= config.video_stream.port <= 65535:
+        raise ValueError("video_stream.port must be in 1..65535")
+    if config.video_stream.fps <= 0.0:
+        raise ValueError("video_stream.fps must be positive")
+    if not 1 <= config.video_stream.jpeg_quality <= 100:
+        raise ValueError("video_stream.jpeg_quality must be in 1..100")
+    if config.video_stream.width <= 0 or config.video_stream.height <= 0:
+        raise ValueError("video_stream width and height must be positive")
+    if config.video_stream.connect_timeout_seconds <= 0.0:
+        raise ValueError(
+            "video_stream.connect_timeout_seconds must be positive"
+        )
+    if config.video_stream.reconnect_interval_seconds <= 0.0:
+        raise ValueError(
+            "video_stream.reconnect_interval_seconds must be positive"
+        )
+    if config.video_stream.frame_stale_seconds <= 0.0:
+        raise ValueError("video_stream.frame_stale_seconds must be positive")
+    if config.video_stream.max_frame_bytes <= 0:
+        raise ValueError("video_stream.max_frame_bytes must be positive")

@@ -8,7 +8,7 @@ import time
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import cv2
 
@@ -17,7 +17,15 @@ from leakguard.camera import FrameSource
 from leakguard.config import load_config
 from leakguard.event_logger import StatusCsvLogger
 from leakguard.predictor import UNetPredictor
-from leakguard.tcp_client import LatestStatusTcpClient, with_network_overrides
+from leakguard.tcp_client import (
+    LatestStatusTcpClient,
+    expand_network_targets,
+    with_network_overrides,
+)
+from leakguard.video_streamer import (
+    LatestFrameTcpStreamer,
+    with_video_overrides,
+)
 from leakguard.visualization import Telemetry, render_dashboard
 
 LOG = logging.getLogger("leakguard")
@@ -53,6 +61,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--no-network", action="store_true", help="Disable TCP status transmission"
+    )
+    parser.add_argument(
+        "--video-host", help="Override Qt HMI video server address"
+    )
+    parser.add_argument(
+        "--video-port", type=int, help="Override Qt HMI video server port"
+    )
+    parser.add_argument(
+        "--no-video-stream",
+        action="store_true",
+        help="Disable annotated JPEG video transmission",
     )
     parser.add_argument("--verbose", action="store_true")
     return parser.parse_args()
@@ -92,6 +111,12 @@ def main() -> int:
             port=args.server_port,
             disabled=args.no_network,
         ),
+        video_stream=with_video_overrides(
+            config.video_stream,
+            host=args.video_host or args.server_host,
+            port=args.video_port,
+            disabled=args.no_video_stream,
+        ),
     )
 
     predictor = UNetPredictor(config.model)
@@ -109,9 +134,15 @@ def main() -> int:
         csv_logger = StatusCsvLogger(
             config.logging.csv_path, config.logging.interval_seconds
         )
-    tcp_client: Optional[LatestStatusTcpClient] = None
+    tcp_clients: List[LatestStatusTcpClient] = []
     if config.network.enabled:
-        tcp_client = LatestStatusTcpClient(config.network)
+        tcp_clients = [
+            LatestStatusTcpClient(target)
+            for target in expand_network_targets(config.network)
+        ]
+    video_streamer: Optional[LatestFrameTcpStreamer] = None
+    if config.video_stream.enabled:
+        video_streamer = LatestFrameTcpStreamer(config.video_stream)
 
     frame_index = 0
     failed_reads = 0
@@ -121,8 +152,10 @@ def main() -> int:
     last_rendered = None
     try:
         source.open()
-        if tcp_client:
+        for tcp_client in tcp_clients:
             tcp_client.start()
+        if video_streamer:
+            video_streamer.start()
         LOG.info("Inference started from %s", source.description)
         while not STOP_REQUESTED:
             loop_started = time.perf_counter()
@@ -153,7 +186,7 @@ def main() -> int:
                     status = analyzer.analyze(
                         prediction.mask, monitoring_roi, danger_roi
                     )
-            if tcp_client:
+            for tcp_client in tcp_clients:
                 tcp_client.update(status)
             now = time.perf_counter()
             instantaneous_fps = 1.0 / max(now - previous_time, 1e-6)
@@ -176,6 +209,8 @@ def main() -> int:
                 threshold=config.model.threshold,
                 show_mask_preview=config.display.show_mask_preview,
             )
+            if video_streamer:
+                video_streamer.update(last_rendered)
             if csv_logger:
                 csv_logger.write(status, prediction, telemetry)
             if now - last_console >= config.display.console_interval_seconds:
@@ -217,8 +252,10 @@ def main() -> int:
         source.release()
         if csv_logger:
             csv_logger.close()
-        if tcp_client:
+        for tcp_client in tcp_clients:
             tcp_client.stop()
+        if video_streamer:
+            video_streamer.stop()
         cv2.destroyAllWindows()
         LOG.info("Resources released; processed frames=%d", frame_index)
 
